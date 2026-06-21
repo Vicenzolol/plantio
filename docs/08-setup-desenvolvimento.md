@@ -38,11 +38,17 @@ npm run db:seed       # admin@plantio.app / admin123
 | Comando | O que faz |
 | --- | --- |
 | `vercel dev` | **Recomendado.** Sobe o front e as funções `/api` juntos |
-| `npm run dev` | Só o front (Vite, porta 5173). As chamadas `/api` são encaminhadas para `http://localhost:3000`, então requer `vercel dev` rodando em paralelo |
+| `npm run dev` | Só o front (Vite, porta 5173). As chamadas `/api` são encaminhadas para `http://localhost:3000`, então requer `vercel dev` **ou** `npm run dev:api` rodando em paralelo |
 | `npm run dev:vercel` | Alias para `vercel dev` |
+| `npm run dev:api` | Sobe só a API em `http://localhost:3000` via Express ([server/dev.ts](../server/dev.ts)), sem precisar da Vercel CLI. Útil com `npm run dev` em outro terminal |
 
 Para a maioria dos casos, use apenas **`vercel dev`**. O proxy `/api` → `:3000` está em
 [vite.config.ts](../vite.config.ts).
+
+> [server/dev.ts](../server/dev.ts) monta os mesmos handlers de `api/**` num servidor Express, então
+> é uma alternativa ao `vercel dev` para quem não tem (ou não quer usar) a Vercel CLI. Ele **não**
+> reproduz exatamente o ambiente de produção — em especial o formato de módulo das funções (ver
+> [09 — Deploy](./09-deploy.md#formato-de-módulo-das-funções-esm-vs-commonjs-️)).
 
 ## Testes e build
 
@@ -61,6 +67,7 @@ Os testes cobrem [src/lib/schedule.ts](../src/lib/schedule.ts) — ver
 | Script | Ação |
 | --- | --- |
 | `dev` | Vite dev server |
+| `dev:api` | API local via Express ([server/dev.ts](../server/dev.ts)), porta 3000 |
 | `dev:vercel` | `vercel dev` (front + API) |
 | `build` | type-check + build de produção |
 | `preview` | serve o build |
