@@ -11,6 +11,9 @@ import {
   getUpcomingWorkDates,
   getActivePeriod,
   sumHours,
+  getDayStatus,
+  getMonthMatrix,
+  addMonths,
 } from './schedule';
 import type { SchedulePeriod, ShiftSwap, ExtraHour } from './types';
 
@@ -134,5 +137,79 @@ describe('sumHours', () => {
   it('getWorkDates respeita o intervalo', () => {
     const dates = getWorkDates('2026-06-01', '2026-06-07', [period]);
     expect(dates).toEqual(['2026-06-01', '2026-06-04', '2026-06-07']);
+  });
+});
+
+describe('getDayStatus', () => {
+  const period = makePeriod({ effectiveFrom: '2026-06-21', shiftHours: '12' });
+
+  it('dia de trabalho do ciclo', () => {
+    const s = getDayStatus('2026-06-21', [period]);
+    expect(s.isWork).toBe(true);
+    expect(s.shiftHours).toBe(12);
+    expect(s.swap).toBeNull();
+    expect(s.hasExtra).toBe(false);
+  });
+
+  it('dia de folga', () => {
+    const s = getDayStatus('2026-06-22', [period]);
+    expect(s.isWork).toBe(false);
+    expect(s.shiftHours).toBe(0);
+  });
+
+  it('troca extra_turno marca trabalho com horas próprias', () => {
+    const swaps: ShiftSwap[] = [
+      { id: 's1', userId: 'u1', date: '2026-06-22', kind: 'extra_turno', hours: '6', note: null, createdAt: '' },
+    ];
+    const s = getDayStatus('2026-06-22', [period], swaps);
+    expect(s.isWork).toBe(true);
+    expect(s.shiftHours).toBe(6);
+    expect(s.swap?.kind).toBe('extra_turno');
+  });
+
+  it('troca folga cancela um dia de trabalho', () => {
+    const swaps: ShiftSwap[] = [
+      { id: 's2', userId: 'u1', date: '2026-06-21', kind: 'folga', hours: null, note: null, createdAt: '' },
+    ];
+    const s = getDayStatus('2026-06-21', [period], swaps);
+    expect(s.isWork).toBe(false);
+    expect(s.shiftHours).toBe(0);
+    expect(s.swap?.kind).toBe('folga');
+  });
+
+  it('hora extra avulsa soma e marca hasExtra', () => {
+    const extras: ExtraHour[] = [
+      { id: 'e1', userId: 'u1', date: '2026-06-22', hours: '3', description: null, createdAt: '' },
+      { id: 'e2', userId: 'u1', date: '2026-06-22', hours: '2', description: null, createdAt: '' },
+    ];
+    const s = getDayStatus('2026-06-22', [period], [], extras);
+    expect(s.hasExtra).toBe(true);
+    expect(s.extraHours).toBe(5);
+  });
+});
+
+describe('getMonthMatrix', () => {
+  it('cobre o mês em semanas de 7 dias começando no domingo', () => {
+    const weeks = getMonthMatrix('2026-06-15');
+    // junho/2026: 1 é segunda -> grade começa no domingo 31/05.
+    expect(weeks[0][0]).toBe('2026-05-31');
+    expect(weeks.every((w) => w.length === 7)).toBe(true);
+    // último dia é sábado.
+    const last = weeks[weeks.length - 1][6];
+    expect(new Date(last + 'T00:00:00Z').getUTCDay()).toBe(6);
+    // primeira coluna é sempre domingo.
+    expect(weeks.every((w) => new Date(w[0] + 'T00:00:00Z').getUTCDay() === 0)).toBe(true);
+    // contém todos os dias do mês.
+    const flat = weeks.flat();
+    expect(flat).toContain('2026-06-01');
+    expect(flat).toContain('2026-06-30');
+  });
+});
+
+describe('addMonths', () => {
+  it('avança e recua ancorando no dia 1', () => {
+    expect(addMonths('2026-06-15', 1)).toBe('2026-07-01');
+    expect(addMonths('2026-01-10', -1)).toBe('2025-12-01');
+    expect(addMonths('2026-12-31', 1)).toBe('2027-01-01');
   });
 });

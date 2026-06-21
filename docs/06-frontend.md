@@ -61,9 +61,9 @@ Expõe `{ periods, extras, swaps, loading, reload }`.
 | `Register.tsx` | `/register` | Form nome/email/senha (senha ≥ 6); usa `register` |
 | `Setup.tsx` | `/setup` | Primeiro acesso: define a 1ª escala via `ScheduleFields` + `createSchedule`; chama `refresh` para liberar o dashboard |
 | `Tabs.tsx` | `/tabs` | Tab bar (Início, Horas, Agenda, Perfil) com `IonTabs` |
-| `Dashboard.tsx` | `/tabs/dashboard` | Status de hoje, horas semana/mês, ações rápidas (modais), próximos 5 plantões |
+| `Dashboard.tsx` | `/tabs/dashboard` | Status de hoje, horas semana/mês, ações rápidas (modais), faixa dos próximos 14 dias |
 | `Hours.tsx` | `/tabs/hours` | Segmento semana/mês/ano; `sumHours`; lista de extras com swipe-to-delete |
-| `Calendar.tsx` | `/tabs/calendar` | Próximos 15/30/60 plantões agrupados por mês; marca trocas |
+| `Calendar.tsx` | `/tabs/calendar` | Calendário mensal em grade, navegável por mês, com ações por dia |
 | `Profile.tsx` | `/tabs/profile` | Conta, escalas (vigente/passadas), trocas (swipe-to-delete), botão "mudar escala", sair |
 
 Todos os cálculos de datas/horas vêm de [src/lib/schedule.ts](../src/lib/schedule.ts), memoizados
@@ -75,9 +75,12 @@ com `useMemo` a partir de `periods`/`swaps`/`extras` do `useData`. Ver
 | Componente | Uso |
 | --- | --- |
 | `ScheduleFields.tsx` | Campos da escala (data, work/rest days, horas, início do turno) + **presets** comuns (12h 1x2, 12x36, 24x72, 6x1). Reutilizado por `Setup` e `ScheduleChangeModal` |
-| `ExtraHoursModal.tsx` | Modal para lançar hora extra (`createExtra`) |
-| `SwapModal.tsx` | Modal para registrar troca (`extra_turno` / `folga`, `createSwap`) |
+| `ExtraHoursModal.tsx` | Modal para lançar hora extra (`createExtra`). Aceita `defaultDate` para abrir com data pré-selecionada |
+| `SwapModal.tsx` | Modal para registrar troca (`extra_turno` / `folga`, `createSwap`). Aceita `defaultDate` e `defaultKind` |
 | `ScheduleChangeModal.tsx` | Modal de "mudar escala" — cria novo período preservando o histórico |
+| `AgendaStrip.tsx` | Faixa horizontal rolável dos próximos N dias, colorida por tipo. Usada na Dashboard. Exporta `dayModifier(status)` (helper de classe CSS) |
+| `MonthCalendar.tsx` | Calendário mensal em grade (7 colunas, domingo primeiro), com navegação entre meses e botão "Hoje". Usado na Agenda |
+| `DayActions.tsx` | Orquestra o fluxo "toca num dia → action sheet → modal". Reutilizado por Dashboard e Agenda. Abre `ExtraHoursModal` ou `SwapModal` com data pré-preenchida |
 
 ## Padrões de UI
 
@@ -87,12 +90,20 @@ com `useMemo` a partir de `periods`/`swaps`/`extras` do `useData`. Ver
 - **Pull-to-refresh:** `IonRefresher` no Dashboard chama `reload()`.
 - **Formatação de horas:** helper local `fmtH(n)` (inteiro → `"12h"`, fracionário → `"12.5h"`),
   repetido em Dashboard/Hours/Calendar.
+- **Ações por dia:** `DayActions` usa `IonActionSheet` com o cabeçalho do dia formatado, seguido
+  de abertura do modal correspondente com `defaultDate` pré-preenchido.
+- **Cores dos dias:** determinadas por `dayModifier(DayStatus)` em `AgendaStrip.tsx` e aplicadas
+  como classes CSS (`.is-work`, `.is-extra-turno`, `.is-cancelled`, `.is-rest`, `.is-today`).
+  Pontinho âmbar (`.agenda-chip__extra` / `.cal-day__extra`) marca horas extras avulsas.
 
 ## Tema
 
 - [src/theme/variables.css](../src/theme/variables.css) — variáveis do Ionic (cores, etc.).
 - [src/theme/app.css](../src/theme/app.css) — classes utilitárias do app (`stat-grid`, `stat-card`,
-  `section-title`, `empty-state`, `auth-wrapper`, `center-spinner`, `work-day-badge`...).
+  `section-title`, `empty-state`, `auth-wrapper`, `center-spinner`, `work-day-badge`...) e as
+  classes da agenda: `.agenda-strip`, `.agenda-chip`, `.cal-wrapper`, `.cal-grid`, `.cal-day`,
+  `.cal-legend` (+ modificadores `is-work`, `is-extra-turno`, `is-cancelled`, `is-rest`,
+  `is-today`, `is-outside`).
 
 ## PWA
 

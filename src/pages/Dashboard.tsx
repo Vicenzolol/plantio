@@ -11,12 +11,8 @@ import {
   IonCardContent,
   IonButton,
   IonIcon,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonNote,
 } from '@ionic/react';
-import { addCircleOutline, swapHorizontalOutline, calendarNumberOutline } from 'ionicons/icons';
+import { addCircleOutline, swapHorizontalOutline } from 'ionicons/icons';
 import type { RefresherEventDetail } from '@ionic/react';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
@@ -27,12 +23,13 @@ import {
   startOfMonth,
   endOfMonth,
   sumHours,
-  getUpcomingWorkDates,
   formatBR,
   isWorkDay,
 } from '../lib/schedule';
 import ExtraHoursModal from '../components/ExtraHoursModal';
 import SwapModal from '../components/SwapModal';
+import AgendaStrip from '../components/AgendaStrip';
+import DayActions from '../components/DayActions';
 
 function fmtH(n: number): string {
   return Number.isInteger(n) ? `${n}h` : `${n.toFixed(1)}h`;
@@ -43,6 +40,7 @@ export default function Dashboard() {
   const { periods, extras, swaps, reload } = useData();
   const [showExtra, setShowExtra] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const today = todayISO();
 
@@ -54,11 +52,6 @@ export default function Dashboard() {
   const monthHours = useMemo(
     () => sumHours(startOfMonth(today), endOfMonth(today), periods, swaps, extras).total,
     [today, periods, swaps, extras],
-  );
-
-  const upcoming = useMemo(
-    () => getUpcomingWorkDates(today, 5, periods, swaps),
-    [today, periods, swaps],
   );
 
   const worksToday = isWorkDay(today, periods, swaps);
@@ -125,26 +118,12 @@ export default function Dashboard() {
           </div>
 
           <p className="section-title">Próximos plantões</p>
-          {upcoming.length === 0 ? (
-            <div className="empty-state">
-              <IonIcon icon={calendarNumberOutline} />
-              <p>Nenhum plantão futuro encontrado.</p>
-            </div>
-          ) : (
-            <IonList inset>
-              {upcoming.map((d) => (
-                <IonItem key={d}>
-                  <IonIcon icon={calendarNumberOutline} slot="start" color="primary" />
-                  <IonLabel>{formatBR(d)}</IonLabel>
-                  <IonNote slot="end">{d === today ? 'hoje' : ''}</IonNote>
-                </IonItem>
-              ))}
-            </IonList>
-          )}
+          <AgendaStrip from={today} onSelectDay={setSelectedDate} />
         </div>
 
         <ExtraHoursModal isOpen={showExtra} onClose={() => setShowExtra(false)} />
         <SwapModal isOpen={showSwap} onClose={() => setShowSwap(false)} />
+        <DayActions date={selectedDate} onClose={() => setSelectedDate(null)} />
       </IonContent>
     </IonPage>
   );

@@ -60,6 +60,12 @@ export function endOfYear(iso: string): string {
   return toISO(new Date(Date.UTC(y, 11, 31)));
 }
 
+/** Soma `n` meses ao mês de `iso`, ancorando no dia 1. */
+export function addMonths(iso: string, n: number): string {
+  const [y, m] = iso.split('-').map(Number);
+  return toISO(new Date(Date.UTC(y, m - 1 + n, 1)));
+}
+
 const WEEKDAYS_PT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const MONTHS_PT = [
   'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
@@ -76,6 +82,17 @@ export function formatBR(iso: string): string {
 export function formatFullBR(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+const MONTHS_FULL_PT = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+/** Ex.: "Junho de 2026" (a partir de qualquer dia do mês). */
+export function monthLabel(iso: string): string {
+  const [y, m] = iso.split('-').map(Number);
+  return `${MONTHS_FULL_PT[m - 1]} de ${y}`;
 }
 
 // ----- Lógica de escala -----
@@ -100,8 +117,9 @@ export function isCycleWorkDay(iso: string, period: SchedulePeriod): boolean {
   return offset % cycle < period.workDays;
 }
 
-function swapForDate(iso: string, swaps: ShiftSwap[]): ShiftSwap | undefined {
-  return swaps.find((s) => s.date === iso);
+/** Troca de turno registrada para a data, ou `null`. */
+export function swapForDate(iso: string, swaps: ShiftSwap[]): ShiftSwap | null {
+  return swaps.find((s) => s.date === iso) ?? null;
 }
 
 /** Considera escala + trocas: a pessoa trabalha nesse dia? */
@@ -164,6 +182,62 @@ export function getUpcomingWorkDates(
     d = addDays(d, 1);
   }
   return result;
+}
+
+/** Classificação de um dia para exibição na agenda/calendário. */
+export interface DayStatus {
+  /** Trabalha nesse dia (já considera trocas). */
+  isWork: boolean;
+  /** Troca de turno registrada para o dia, se houver. */
+  swap: ShiftSwap | null;
+  /** Há horas extras avulsas registradas no dia. */
+  hasExtra: boolean;
+  /** Horas previstas do turno (0 se folga). */
+  shiftHours: number;
+  /** Soma das horas extras avulsas do dia. */
+  extraHours: number;
+}
+
+/** Classifica um dia combinando escala, trocas e horas extras avulsas. */
+export function getDayStatus(
+  iso: string,
+  periods: SchedulePeriod[],
+  swaps: ShiftSwap[] = [],
+  extras: ExtraHour[] = [],
+): DayStatus {
+  const isWork = isWorkDay(iso, periods, swaps);
+  const dayExtras = extras.filter((e) => e.date === iso);
+  const extraHours = dayExtras.reduce((acc, e) => acc + Number(e.hours), 0);
+  return {
+    isWork,
+    swap: swapForDate(iso, swaps),
+    hasExtra: dayExtras.length > 0,
+    shiftHours: isWork ? shiftHoursForDay(iso, periods, swaps) : 0,
+    extraHours,
+  };
+}
+
+/**
+ * Grade do mês de `iso` para exibição em calendário: semanas de 7 datas ISO,
+ * começando no domingo, incluindo os dias "vazados" dos meses vizinhos.
+ */
+export function getMonthMatrix(iso: string): string[][] {
+  const first = startOfMonth(iso);
+  const last = endOfMonth(iso);
+  // Recua até o domingo da primeira semana (getUTCDay: 0=domingo).
+  const gridStart = addDays(first, -parseISO(first).getUTCDay());
+  // Avança até o sábado da última semana.
+  const gridEnd = addDays(last, 6 - parseISO(last).getUTCDay());
+  const weeks: string[][] = [];
+  for (let d = gridStart; d <= gridEnd; ) {
+    const week: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      week.push(d);
+      d = addDays(d, 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
 }
 
 export interface HoursSummary {

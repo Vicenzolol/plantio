@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   IonModal,
   IonHeader,
@@ -20,18 +20,29 @@ import { todayISO } from '../lib/schedule';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  defaultDate?: string;
 }
 
-export default function ExtraHoursModal({ isOpen, onClose }: Props) {
+export default function ExtraHoursModal({ isOpen, onClose, defaultDate }: Props) {
   const { reload } = useData();
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(defaultDate ?? todayISO());
   const [hours, setHours] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Sincroniza a data ao (re)abrir, respeitando a data pré-selecionada.
+  useEffect(() => {
+    if (isOpen) {
+      setDate(defaultDate ?? todayISO());
+      setHours('');
+      setDescription('');
+      setError('');
+    }
+  }, [isOpen, defaultDate]);
+
   const reset = () => {
-    setDate(todayISO());
+    setDate(defaultDate ?? todayISO());
     setHours('');
     setDescription('');
     setError('');

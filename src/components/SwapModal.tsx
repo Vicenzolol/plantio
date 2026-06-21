@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   IonModal,
   IonHeader,
@@ -25,20 +25,33 @@ import type { SwapKind } from '../lib/types';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  defaultDate?: string;
+  defaultKind?: SwapKind;
 }
 
-export default function SwapModal({ isOpen, onClose }: Props) {
+export default function SwapModal({ isOpen, onClose, defaultDate, defaultKind }: Props) {
   const { reload } = useData();
-  const [date, setDate] = useState(todayISO());
-  const [kind, setKind] = useState<SwapKind>('extra_turno');
+  const [date, setDate] = useState(defaultDate ?? todayISO());
+  const [kind, setKind] = useState<SwapKind>(defaultKind ?? 'extra_turno');
   const [hours, setHours] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Sincroniza data/tipo ao (re)abrir, respeitando os valores pré-selecionados.
+  useEffect(() => {
+    if (isOpen) {
+      setDate(defaultDate ?? todayISO());
+      setKind(defaultKind ?? 'extra_turno');
+      setHours('');
+      setNote('');
+      setError('');
+    }
+  }, [isOpen, defaultDate, defaultKind]);
+
   const reset = () => {
-    setDate(todayISO());
-    setKind('extra_turno');
+    setDate(defaultDate ?? todayISO());
+    setKind(defaultKind ?? 'extra_turno');
     setHours('');
     setNote('');
     setError('');
