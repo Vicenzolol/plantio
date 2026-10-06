@@ -20,7 +20,21 @@ export const users = pgTable('users', {
 });
 
 /**
- * Cada período representa uma escala vigente a partir de uma data.
+ * Emprego/trabalho do usuário. Cada emprego tem sua própria escala (períodos) e trocas,
+ * e uma cor usada para pintar seus dias de plantão na agenda.
+ */
+export const jobs = pgTable('jobs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color').notNull().default('#0a84ff'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Cada período representa uma escala de um emprego vigente a partir de uma data.
  * `effectiveFrom` é o início da vigência E a âncora do ciclo (dia 0 = trabalho).
  * `effectiveUntil` nulo = escala ainda vigente (aberta).
  */
@@ -29,6 +43,9 @@ export const schedulePeriods = pgTable('schedule_periods', {
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
   effectiveFrom: date('effective_from').notNull(),
   effectiveUntil: date('effective_until'),
   workDays: integer('work_days').notNull().default(1),
@@ -43,6 +60,9 @@ export const extraHours = pgTable('extra_hours', {
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
   date: date('date').notNull(),
   hours: numeric('hours', { precision: 5, scale: 2 }).notNull(),
   description: text('description'),
@@ -54,6 +74,9 @@ export const shiftSwaps = pgTable('shift_swaps', {
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
   date: date('date').notNull(),
   kind: swapKindEnum('kind').notNull(),
   hours: numeric('hours', { precision: 5, scale: 2 }),
@@ -62,6 +85,7 @@ export const shiftSwaps = pgTable('shift_swaps', {
 });
 
 export type User = typeof users.$inferSelect;
+export type JobRow = typeof jobs.$inferSelect;
 export type SchedulePeriodRow = typeof schedulePeriods.$inferSelect;
 export type ExtraHourRow = typeof extraHours.$inferSelect;
 export type ShiftSwapRow = typeof shiftSwaps.$inferSelect;
