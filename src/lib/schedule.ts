@@ -96,16 +96,56 @@ export function monthLabel(iso: string): string {
 }
 
 // ----- Lógica de escala -----
+//
+// Cada emprego tem sua própria sequência de períodos e suas próprias trocas. A escala de um
+// emprego nunca interfere na de outro: o cálculo é feito por emprego (agrupando por `jobId`) e os
+// resultados são combinados (um dia "é de trabalho" se algum emprego trabalha nele; as horas somam).
 
-/** Período que cobre a data (por vigência). `null` se nenhum. */
+/**
+ * Período que cobre a data (por vigência), dentre os períodos de UM emprego. `null` se nenhum.
+ * Em sobreposição vence o de `effectiveFrom` mais recente; empate na mesma data, o criado por último.
+ */
 export function getActivePeriod(iso: string, periods: SchedulePeriod[]): SchedulePeriod | null {
   let best: SchedulePeriod | null = null;
   for (const p of periods) {
     if (iso < p.effectiveFrom) continue;
     if (p.effectiveUntil && iso > p.effectiveUntil) continue;
-    if (!best || p.effectiveFrom > best.effectiveFrom) best = p;
+    if (
+      !best ||
+      p.effectiveFrom > best.effectiveFrom ||
+      (p.effectiveFrom === best.effectiveFrom && p.createdAt > best.createdAt)
+    ) {
+      best = p;
+    }
   }
   return best;
+}
+
+/**
+ * Início e fim de um emprego pelas suas escalas. `end` só existe quando nenhuma escala dele está
+ * aberta — o emprego foi encerrado e `end` é o último dia trabalhado (maior `effectiveUntil`).
+ * `null` se o emprego não tem escala.
+ */
+export function jobLifetime(
+  jobId: string,
+  periods: SchedulePeriod[],
+): { start: string; end: string | null } | null {
+  const own = periods.filter((p) => p.jobId === jobId);
+  if (own.length === 0) return null;
+  let start = own[0].effectiveFrom;
+  let lastUntil = '';
+  let open = false;
+  for (const p of own) {
+    if (p.effectiveFrom < start) start = p.effectiveFrom;
+    if (p.effectiveUntil == null) open = true;
+    else if (p.effectiveUntil > lastUntil) lastUntil = p.effectiveUntil;
+  }
+  return { start, end: open ? null : lastUntil };
+}
+
+/** Último dia de um emprego encerrado; `null` se ainda está ativo. */
+export function jobEndDate(jobId: string, periods: SchedulePeriod[]): string | null {
+  return jobLifetime(jobId, periods)?.end ?? null;
 }
 
 /** A data cai num dia de trabalho do ciclo do período? (ignora trocas) */
@@ -117,41 +157,73 @@ export function isCycleWorkDay(iso: string, period: SchedulePeriod): boolean {
   return offset % cycle < period.workDays;
 }
 
-/** Troca de turno registrada para a data, ou `null`. */
-export function swapForDate(iso: string, swaps: ShiftSwap[]): ShiftSwap | null {
-  return swaps.find((s) => s.date === iso) ?? null;
+/** Trocas de turno registradas para a data (de qualquer emprego). */
+export function swapsForDate(iso: string, swaps: ShiftSwap[]): ShiftSwap[] {
+  return swaps.filter((s) => s.date === iso);
 }
 
-/** Considera escala + trocas: a pessoa trabalha nesse dia? */
+/** Plantão de um emprego num dia. */
+export interface JobShift {
+  jobId: string;
+  /** Horas previstas: as da troca, se ela tiver horas próprias; senão, as do turno da escala. */
+  hours: number;
+  /** Troca `extra_turno` que colocou/ajustou esse plantão, se houver. */
+  swap: ShiftSwap | null;
+}
+
+/**
+ * Plantões do dia: um por emprego que trabalha nele. Para cada emprego, uma troca dele no dia
+ * sobrepõe o ciclo (`folga` → não trabalha; `extra_turno` → trabalha); sem troca, vale o ciclo do
+ * período ativo desse emprego. Ordem: primeira aparição do emprego em `periods` (depois `swaps`).
+ */
+export function getShiftsForDay(
+  iso: string,
+  periods: SchedulePeriod[],
+  swaps: ShiftSwap[] = [],
+): JobShift[] {
+  const daySwaps = swapsForDate(iso, swaps);
+  const jobIds = new Set<string>();
+  for (const p of periods) jobIds.add(p.jobId);
+  for (const s of daySwaps) jobIds.add(s.jobId);
+
+  const shifts: JobShift[] = [];
+  for (const jobId of jobIds) {
+    const swap = daySwaps.find((s) => s.jobId === jobId) ?? null;
+    if (swap?.kind === 'folga') continue;
+    const period = getActivePeriod(
+      iso,
+      periods.filter((p) => p.jobId === jobId),
+    );
+    if (swap?.kind === 'extra_turno') {
+      const hours =
+        swap.hours != null ? Number(swap.hours) : period ? Number(period.shiftHours) : 0;
+      shifts.push({ jobId, hours, swap });
+    } else if (period && isCycleWorkDay(iso, period)) {
+      shifts.push({ jobId, hours: Number(period.shiftHours), swap: null });
+    }
+  }
+  return shifts;
+}
+
+/** Considera escalas + trocas: a pessoa trabalha (em algum emprego) nesse dia? */
 export function isWorkDay(
   iso: string,
   periods: SchedulePeriod[],
   swaps: ShiftSwap[] = [],
 ): boolean {
-  const swap = swapForDate(iso, swaps);
-  if (swap) {
-    if (swap.kind === 'folga') return false;
-    if (swap.kind === 'extra_turno') return true;
-  }
-  const period = getActivePeriod(iso, periods);
-  return period ? isCycleWorkDay(iso, period) : false;
+  return getShiftsForDay(iso, periods, swaps).length > 0;
 }
 
-/** Horas previstas de um dia de trabalho (turno + eventual troca com horas próprias). */
+/** Horas previstas no dia: soma dos plantões de todos os empregos (0 se folga). */
 export function shiftHoursForDay(
   iso: string,
   periods: SchedulePeriod[],
   swaps: ShiftSwap[] = [],
 ): number {
-  const swap = swapForDate(iso, swaps);
-  if (swap?.kind === 'extra_turno' && swap.hours != null) {
-    return Number(swap.hours);
-  }
-  const period = getActivePeriod(iso, periods);
-  return period ? Number(period.shiftHours) : 0;
+  return getShiftsForDay(iso, periods, swaps).reduce((acc, s) => acc + s.hours, 0);
 }
 
-/** Datas trabalhadas dentro do intervalo [start, end] (inclusive). */
+/** Datas trabalhadas (em algum emprego) dentro do intervalo [start, end] (inclusive). */
 export function getWorkDates(
   start: string,
   end: string,
@@ -186,34 +258,36 @@ export function getUpcomingWorkDates(
 
 /** Classificação de um dia para exibição na agenda/calendário. */
 export interface DayStatus {
-  /** Trabalha nesse dia (já considera trocas). */
+  /** Trabalha nesse dia em algum emprego (já considera trocas). */
   isWork: boolean;
-  /** Troca de turno registrada para o dia, se houver. */
-  swap: ShiftSwap | null;
+  /** Plantões do dia, um por emprego que trabalha (já considera trocas). */
+  shifts: JobShift[];
+  /** Trocas de turno registradas para o dia (de qualquer emprego). */
+  swaps: ShiftSwap[];
   /** Há horas extras avulsas registradas no dia. */
   hasExtra: boolean;
-  /** Horas previstas do turno (0 se folga). */
+  /** Horas previstas dos plantões do dia, somando os empregos (0 se folga). */
   shiftHours: number;
   /** Soma das horas extras avulsas do dia. */
   extraHours: number;
 }
 
-/** Classifica um dia combinando escala, trocas e horas extras avulsas. */
+/** Classifica um dia combinando escalas, trocas e horas extras avulsas. */
 export function getDayStatus(
   iso: string,
   periods: SchedulePeriod[],
   swaps: ShiftSwap[] = [],
   extras: ExtraHour[] = [],
 ): DayStatus {
-  const isWork = isWorkDay(iso, periods, swaps);
+  const shifts = getShiftsForDay(iso, periods, swaps);
   const dayExtras = extras.filter((e) => e.date === iso);
-  const extraHours = dayExtras.reduce((acc, e) => acc + Number(e.hours), 0);
   return {
-    isWork,
-    swap: swapForDate(iso, swaps),
+    isWork: shifts.length > 0,
+    shifts,
+    swaps: swapsForDate(iso, swaps),
     hasExtra: dayExtras.length > 0,
-    shiftHours: isWork ? shiftHoursForDay(iso, periods, swaps) : 0,
-    extraHours,
+    shiftHours: shifts.reduce((acc, s) => acc + s.hours, 0),
+    extraHours: dayExtras.reduce((acc, e) => acc + Number(e.hours), 0),
   };
 }
 
@@ -240,11 +314,22 @@ export function getMonthMatrix(iso: string): string[][] {
   return weeks;
 }
 
+/** Horas de um emprego num intervalo. */
+export interface JobHours {
+  /** Horas dos plantões de escala (já com trocas). */
+  scheduled: number;
+  /** Horas extras avulsas lançadas nesse emprego. */
+  extra: number;
+  /** Quantidade de plantões desse emprego. */
+  workDays: number;
+}
+
 export interface HoursSummary {
-  scheduled: number; // horas dos turnos de escala (já com trocas)
+  scheduled: number; // horas dos turnos de escala (já com trocas), somando os empregos
   extra: number; // horas extras avulsas
   total: number;
-  workDays: number;
+  workDays: number; // dias com ao menos um plantão (dois empregos no mesmo dia contam 1)
+  byJob: Record<string, JobHours>; // detalhamento por emprego (chave: jobId)
 }
 
 /** Soma de horas no intervalo [start, end] (inclusive). */
@@ -255,15 +340,32 @@ export function sumHours(
   swaps: ShiftSwap[] = [],
   extras: ExtraHour[] = [],
 ): HoursSummary {
-  const dates = getWorkDates(start, end, periods, swaps);
-  const scheduled = dates.reduce((acc, d) => acc + shiftHoursForDay(d, periods, swaps), 0);
-  const extra = extras
-    .filter((e) => e.date >= start && e.date <= end)
-    .reduce((acc, e) => acc + Number(e.hours), 0);
+  let scheduled = 0;
+  let workDays = 0;
+  const byJob: Record<string, JobHours> = {};
+  const jobHours = (jobId: string) => (byJob[jobId] ??= { scheduled: 0, extra: 0, workDays: 0 });
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const shifts = getShiftsForDay(d, periods, swaps);
+    if (shifts.length === 0) continue;
+    workDays++;
+    for (const s of shifts) {
+      scheduled += s.hours;
+      const job = jobHours(s.jobId);
+      job.scheduled += s.hours;
+      job.workDays++;
+    }
+  }
+  let extra = 0;
+  for (const e of extras) {
+    if (e.date < start || e.date > end) continue;
+    extra += Number(e.hours);
+    jobHours(e.jobId).extra += Number(e.hours);
+  }
   return {
     scheduled,
     extra,
     total: scheduled + extra,
-    workDays: dates.length,
+    workDays,
+    byJob,
   };
 }
