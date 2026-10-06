@@ -1,7 +1,7 @@
 # Documentação do Plantio
 
 Documentação técnica do **Plantio** — app mobile-first (PWA, foco iOS) para gerenciar
-escalas de plantão, horas trabalhadas e trocas de turno.
+escalas de plantão (de um ou mais trabalhos), horas trabalhadas e trocas de turno.
 
 ## Índice
 

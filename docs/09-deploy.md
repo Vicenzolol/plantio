@@ -68,6 +68,55 @@ exigir mudanças em cascata.
    npm run db:seed
    ```
 
+## Limite de funções serverless ⚠️
+
+No plano **Hobby** a Vercel aceita no máximo **12 funções por deploy**, e cada arquivo em `api/`
+(exceto `api/_lib/`) vira uma função. O projeto está **exatamente em 12**. Um endpoint novo em arquivo
+próprio faria o deploy falhar — por isso `/api/jobs` usa um arquivo só com `?id=` para PATCH/DELETE.
+Se precisar de mais rotas, junte com uma existente ou remova os endpoints temporários
+`api/debug.ts` e `api/debug-db.ts`.
+
+## Como as migrations chegam à produção
+
+**A Vercel não roda migrations.** O build dela é só `npm run build` (type-check + Vite); ela não
+encosta no banco. Mudanças de estrutura no banco são aplicadas **à mão**, de uma máquina com a
+`DATABASE_URL` de produção, com:
+
+```bash
+npm run db:migrate
+```
+
+O comando ([scripts/migrate.ts](../scripts/migrate.ts)) lê os arquivos de `drizzle/`, consulta a
+tabela `drizzle.__drizzle_migrations` (o registro do que já foi aplicado naquele banco) e aplica
+**só as pendentes**, registrando-as no fim. Rodar de novo não faz nada — é seguro repetir.
+
+## Deploy da migration de múltiplos empregos (`0001_add_jobs`)
+
+A migration cria a tabela `jobs` e a coluna `job_id` em escalas, trocas e horas extras. Ela **não
+apaga nem altera nenhum dado**: cada usuário que já tem registros ganha um "Trabalho principal" azul
+e tudo o que ele tinha é ligado a esse trabalho — a agenda e as horas ficam exatamente iguais. Ela
+roda num bloco único e atômico: se algo falhar, nada muda.
+
+O código novo lê/grava `jobs` e `job_id`; o código antigo grava **sem** `job_id`. Então banco e
+código precisam subir juntos, nesta ordem:
+
+1. **(Recomendado) Backup:** no painel do Neon, crie um branch a partir do branch de produção (é uma
+   cópia instantânea; se precisar voltar, dá para restaurar a partir dele).
+2. **Ensaie no dev:** com uma cópia dos dados de produção no branch de dev, rode
+   `npx tsx --env-file=.env.dev scripts/migrate.ts` e confira o app contra o dev
+   (ver [08 — Setup](./08-setup-desenvolvimento.md#banco-de-desenvolvimento-branch-dev-no-neon)).
+3. **Aplique a migration:** com a `DATABASE_URL` de produção no `.env`, rode `npm run db:migrate`.
+   Deve imprimir "Migrations aplicadas com sucesso."
+4. **Faça o deploy logo em seguida** (push para o branch que a Vercel publica, ou `vercel --prod`).
+
+Entre os passos 3 e 4, o app antigo ainda lê tudo normalmente, mas **criar escala, troca ou hora
+extra** falha (o `job_id` passa a ser obrigatório) — por isso o deploy deve vir em seguida. Na
+ordem inversa (deploy antes da migration), **todas** as rotas de escala/troca/emprego quebram até a
+migration rodar — por isso migration primeiro.
+
+Clientes com o PWA antigo em cache continuam funcionando depois do deploy: sem `jobId`,
+`POST /api/schedules`, `POST /api/swaps` e `POST /api/extras` usam o emprego mais antigo do usuário.
+
 ## Notas de ambiente
 
 - `NODE_ENV === 'production'` faz o cookie de sessão receber a flag `Secure` (ver
@@ -80,7 +129,8 @@ exigir mudanças em cascata.
 ## Checklist pós-deploy
 
 - [ ] Variáveis `DATABASE_URL` e `JWT_SECRET` configuradas em produção
-- [ ] Migrations aplicadas no banco de produção
+- [ ] Migrations aplicadas no banco de produção (antes do deploy, se houver migration nova)
+- [ ] No máximo 12 arquivos de função em `api/` (fora de `_lib/`)
 - [ ] Usuário admin semeado e **senha trocada**
 - [ ] Login funcionando (cookie `Secure` sendo setado sob HTTPS)
 - [ ] PWA instalável (manifest + ícones servidos a partir de `dist/`)

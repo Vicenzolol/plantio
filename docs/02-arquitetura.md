@@ -19,8 +19,12 @@
 ```
 plantio/
 ├── api/                  # Vercel Serverless Functions (backend)
-│   ├── _lib/auth.ts      # helpers de sessão JWT, hashing, cookies, requireUser
+│   ├── _lib/             # helpers (não viram função na Vercel)
+│   │   ├── auth.ts       # sessão JWT, hashing, cookies, requireUser
+│   │   ├── jobs.ts       # validação de nome/cor, findUserJob
+│   │   └── periods.ts    # validação e criação de período (encerra só o do mesmo emprego)
 │   ├── auth/             # login, logout, me, register
+│   ├── jobs/             # GET/POST/PATCH/DELETE de empregos (um arquivo só, id por query)
 │   ├── schedules/        # GET/POST de períodos de escala
 │   ├── extras/           # GET/POST e DELETE [id] de horas extras
 │   └── swaps/            # GET/POST e DELETE [id] de trocas de turno
@@ -38,9 +42,11 @@ plantio/
 │   ├── lib/
 │   │   ├── api.ts        # cliente HTTP tipado para /api
 │   │   ├── auth.tsx      # AuthProvider / useAuth (sessão)
-│   │   ├── data.tsx      # DataProvider / useData (escala, extras, trocas)
+│   │   ├── data.tsx      # DataProvider / useData (empregos, escala, extras, trocas)
 │   │   ├── schedule.ts   # LÓGICA DE ESCALA (pura, testada)
 │   │   ├── schedule.test.ts
+│   │   ├── jobs.ts       # cores dos empregos e aparência de cada dia (pura, testada)
+│   │   ├── jobs.test.ts
 │   │   └── types.ts      # tipos de domínio compartilhados no front
 │   ├── pages/            # telas (Login, Register, Setup, Tabs, Dashboard, Hours, Calendar, Profile)
 │   ├── components/       # modais e campos reutilizáveis
@@ -66,7 +72,7 @@ DataProvider / AuthProvider                                  db (Drizzle) ──
 ```
 
 - O **estado global** vive em dois contexts: `AuthProvider` (usuário/sessão) e `DataProvider`
-  (períodos, extras, trocas). Ver [06 — Frontend](./06-frontend.md).
+  (empregos, períodos, extras, trocas). Ver [06 — Frontend](./06-frontend.md).
 - **Cálculos** (quem trabalha quando, soma de horas) são feitos **no cliente** por funções puras de
   [src/lib/schedule.ts](../src/lib/schedule.ts) — o backend apenas persiste e devolve os dados crus.
 - O backend é **stateless**: cada função lê a sessão do cookie, valida e fala com o banco. O driver
@@ -87,4 +93,8 @@ DataProvider / AuthProvider                                  db (Drizzle) ──
 - **`numeric` do Postgres chega como string.** Campos como `shiftHours`/`hours` são `string` no
   front e convertidos com `Number(...)` na hora do cálculo (ver [03](./03-modelo-de-dados.md)).
 - **Visual iOS forçado** (`setupIonicReact({ mode: 'ios' })`) mesmo no Android/web, pelo foco Apple.
+- **Vários empregos, cálculo por emprego.** Escalas e trocas pertencem a um emprego (`jobId`); a
+  lógica calcula cada emprego separadamente e só depois combina (ver
+  [04 — Lógica de escala](./04-logica-de-escala.md)).
+- **Até 12 funções em `api/`** (limite do plano Hobby da Vercel) — ver [05 — API](./05-api.md).
 </content>

@@ -59,8 +59,9 @@ npm run build     # tsc --noEmit + vite build (saída em dist/)
 npm run preview   # serve o build localmente
 ```
 
-Os testes cobrem [src/lib/schedule.ts](../src/lib/schedule.ts) — ver
-[04 — Lógica de escala](./04-logica-de-escala.md).
+Os testes cobrem [src/lib/schedule.ts](../src/lib/schedule.ts) (ciclo, vigências, trocas, soma de
+horas, múltiplos empregos) e [src/lib/jobs.ts](../src/lib/jobs.ts) (cores dos empregos e aparência
+dos dias) — ver [04 — Lógica de escala](./04-logica-de-escala.md).
 
 ## Scripts disponíveis (`package.json`)
 
@@ -88,4 +89,28 @@ Os testes cobrem [src/lib/schedule.ts](../src/lib/schedule.ts) — ver
 | `JWT_SECRET` | sim | Segredo para assinar os JWT de sessão |
 
 Ver [.env.example](../.env.example) e [07 — Autenticação](./07-autenticacao.md).
+
+## Banco de desenvolvimento (branch `dev` no Neon)
+
+Existe um branch de **desenvolvimento** no Neon, separado do de produção, com uma cópia dos dados de
+produção para testes. A URL dele fica no arquivo **`.env.dev`** (fora do git, como todo `.env.*`).
+
+> ⚠️ Hoje o `.env` local aponta para **produção**. Tudo o que roda só com o `.env` (`npm run dev:api`,
+> `npm run db:migrate`, `npm run db:seed`) grava em produção. Para usar o dev, passe o `.env.dev`
+> antes — ele tem prioridade, e o `JWT_SECRET` continua vindo do `.env`:
+
+```bash
+npx tsx --env-file=.env.dev scripts/migrate.ts   # aplica migrations no DEV
+npx tsx --env-file=.env.dev scripts/seed.ts      # seed no DEV
+npx tsx --env-file=.env.dev server/dev.ts        # API local (:3000) usando o DEV
+```
+
+**Toda migration nova deve ser ensaiada no dev antes de produção:** copie os dados de produção para
+o dev, rode a migration no dev, confira o app, e só então rode em produção (ver
+[09 — Deploy](./09-deploy.md)).
+
+Para atualizar o dev com os dados atuais de produção, o jeito mais simples é pelo painel do Neon:
+crie um branch novo a partir do de produção (é uma cópia instantânea) e troque a URL do `.env.dev`
+por ele — ou, se o branch de dev tiver sido criado a partir do de produção, use **Reset from
+parent**.
 </content>

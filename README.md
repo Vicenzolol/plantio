@@ -70,10 +70,14 @@ npm run build
 
 ## Como a escala funciona
 
-Cada escala é um **período com vigência** (`schedule_periods`): tem uma data de início
-(`effective_from`, que também ancora o ciclo) e um fim opcional. O ciclo repete
-`workDays` dias de trabalho seguidos de `restDays` de folga. Ao **mudar de escala**, o período
-aberto anterior é encerrado no dia anterior à nova data — o passado fica intacto e o futuro
-passa a usar a nova escala. Trocas de turno (`folga` / `extra_turno`) ajustam dias específicos.
+A pessoa pode ter **mais de um trabalho** (`jobs`), cada um com nome, cor (usada na agenda) e
+escala própria. Cada escala é um **período com vigência** (`schedule_periods`) de um trabalho: tem
+uma data de início (`effective_from`, que também ancora o ciclo) e um fim opcional. O ciclo repete
+`workDays` dias de trabalho seguidos de `restDays` de folga. Ao **mudar de escala** de um trabalho,
+o período aberto anterior daquele trabalho é encerrado no dia anterior à nova data — o passado fica
+intacto, o futuro passa a usar a nova escala e os outros trabalhos não mudam. Trocas de turno
+(`folga` / `extra_turno`) ajustam dias específicos de um trabalho, e horas extras são lançadas num
+trabalho. As horas de todos os trabalhos somam. Ao **encerrar** um trabalho (último dia), o
+histórico até ali é mantido e ele sai da agenda dali em diante; dá para retomá-lo com uma nova escala.
 
 Toda a lógica de datas é pura e testada em [src/lib/schedule.ts](src/lib/schedule.ts).
