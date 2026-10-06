@@ -15,34 +15,52 @@ import {
 } from '@ionic/react';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { jobsAvailableOn, suggestJobForDay } from '../lib/jobs';
 import { todayISO } from '../lib/schedule';
+import JobPicker from './JobPicker';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   defaultDate?: string;
+  /** Trabalho pré-selecionado (sem ele, o que tem plantão no dia, ou o primeiro). */
+  defaultJobId?: string;
 }
 
-export default function ExtraHoursModal({ isOpen, onClose, defaultDate }: Props) {
-  const { reload } = useData();
+export default function ExtraHoursModal({ isOpen, onClose, defaultDate, defaultJobId }: Props) {
+  const { jobs, periods, swaps, reload } = useData();
   const [date, setDate] = useState(defaultDate ?? todayISO());
+  const [jobId, setJobId] = useState('');
   const [hours, setHours] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Sincroniza a data ao (re)abrir, respeitando a data pré-selecionada.
+  // Só trabalhos não encerrados antes da data. Se o escolhido sair da lista (mudou a data), vale
+  // o primeiro disponível.
+  const available = jobsAvailableOn(date || todayISO(), jobs, periods);
+  const selectedJobId = available.some((j) => j.id === jobId) ? jobId : (available[0]?.id ?? '');
+
+  const initialJobId = () =>
+    defaultJobId ??
+    suggestJobForDay(defaultDate ?? todayISO(), 'working', jobs, periods, swaps) ??
+    '';
+
+  // Sincroniza data/trabalho ao (re)abrir, respeitando os valores pré-selecionados.
+  // `jobs`/`periods`/`swaps` ficam fora das deps: o reload após salvar não deve mexer no formulário.
   useEffect(() => {
     if (isOpen) {
       setDate(defaultDate ?? todayISO());
+      setJobId(initialJobId());
       setHours('');
       setDescription('');
       setError('');
     }
-  }, [isOpen, defaultDate]);
+  }, [isOpen, defaultDate, defaultJobId]);
 
   const reset = () => {
     setDate(defaultDate ?? todayISO());
+    setJobId(initialJobId());
     setHours('');
     setDescription('');
     setError('');
@@ -52,10 +70,16 @@ export default function ExtraHoursModal({ isOpen, onClose, defaultDate }: Props)
     setError('');
     const h = Number(hours);
     if (!date) return setError('Escolha a data.');
+    if (!selectedJobId) return setError('Nenhum trabalho ativo nessa data.');
     if (!Number.isFinite(h) || h <= 0) return setError('Informe as horas trabalhadas.');
     setBusy(true);
     try {
-      await api.createExtra({ date, hours: h, description: description || null });
+      await api.createExtra({
+        jobId: selectedJobId,
+        date,
+        hours: h,
+        description: description || null,
+      });
       await reload();
       reset();
       onClose();
@@ -85,6 +109,7 @@ export default function ExtraHoursModal({ isOpen, onClose, defaultDate }: Props)
         <p className="ion-padding-start ion-padding-end ion-padding-top">
           Trabalhei horas extras neste dia:
         </p>
+        <JobPicker jobs={available} value={selectedJobId} onChange={setJobId} />
         <IonList inset>
           <IonItem>
             <IonInput

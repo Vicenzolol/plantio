@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useData } from '../lib/data';
 import { addDays, todayISO, formatBR, getDayStatus, type DayStatus } from '../lib/schedule';
+import { dayClassNames, dayStyle, dayVisual } from '../lib/jobs';
 
 interface Props {
   /** Primeiro dia da faixa (ISO YYYY-MM-DD). */
@@ -10,16 +11,9 @@ interface Props {
   onSelectDay: (iso: string) => void;
 }
 
-/** Modificador de cor do dia a partir do seu status. */
-export function dayModifier(s: DayStatus): string {
-  if (s.swap?.kind === 'extra_turno') return 'is-extra-turno';
-  if (s.swap?.kind === 'folga') return 'is-cancelled';
-  return s.isWork ? 'is-work' : 'is-rest';
-}
-
 /** Faixa horizontal rolável dos próximos dias, estilo tira de agenda. */
 export default function AgendaStrip({ from, days = 14, onSelectDay }: Props) {
-  const { periods, swaps, extras } = useData();
+  const { jobs, periods, swaps, extras } = useData();
   const today = todayISO();
 
   const items = useMemo(() => {
@@ -36,11 +30,13 @@ export default function AgendaStrip({ from, days = 14, onSelectDay }: Props) {
       {items.map(({ iso, status }) => {
         const weekday = formatBR(iso).split(',')[0];
         const dayNum = Number(iso.slice(8, 10));
+        const visual = dayVisual(status, jobs);
         return (
           <button
             key={iso}
             type="button"
-            className={`agenda-chip ${dayModifier(status)} ${iso === today ? 'is-today' : ''}`}
+            className={`agenda-chip ${dayClassNames(visual)} ${iso === today ? 'is-today' : ''}`}
+            style={dayStyle(visual)}
             onClick={() => onSelectDay(iso)}
           >
             <span className="agenda-chip__wd">{weekday}</span>

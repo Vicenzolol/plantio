@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -24,8 +24,9 @@ import {
   endOfMonth,
   sumHours,
   formatBR,
-  isWorkDay,
+  getDayStatus,
 } from '../lib/schedule';
+import { dayVisual } from '../lib/jobs';
 import ExtraHoursModal from '../components/ExtraHoursModal';
 import SwapModal from '../components/SwapModal';
 import AgendaStrip from '../components/AgendaStrip';
@@ -37,7 +38,7 @@ function fmtH(n: number): string {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { periods, extras, swaps, reload } = useData();
+  const { jobs, periods, extras, swaps, reload } = useData();
   const [showExtra, setShowExtra] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -54,7 +55,15 @@ export default function Dashboard() {
     [today, periods, swaps, extras],
   );
 
-  const worksToday = isWorkDay(today, periods, swaps);
+  const todayVisual = useMemo(
+    () => dayVisual(getDayStatus(today, periods, swaps, extras), jobs),
+    [today, periods, swaps, extras, jobs],
+  );
+  const worksToday = todayVisual.modifier === 'is-work';
+  // O card de hoje ganha a cor do trabalho do dia (ou as faixas, se forem dois).
+  const todayCardStyle = worksToday
+    ? ({ '--background': todayVisual.background, '--color': todayVisual.color } as CSSProperties)
+    : undefined;
 
   const onRefresh = async (e: CustomEvent<RefresherEventDetail>) => {
     await reload();
@@ -77,8 +86,9 @@ export default function Dashboard() {
 
         <div className="ion-padding">
           <IonCard
-            color={worksToday ? 'primary' : 'light'}
-            style={{ borderRadius: 18, marginTop: 0 }}
+            color={worksToday ? undefined : 'light'}
+            className={todayVisual.multi ? 'is-multi' : undefined}
+            style={{ borderRadius: 18, marginTop: 0, ...todayCardStyle }}
           >
             <IonCardContent>
               <div style={{ fontSize: 13, opacity: 0.8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -87,6 +97,12 @@ export default function Dashboard() {
               <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>
                 {worksToday ? 'Dia de plantão 🏥' : 'Dia de folga 😌'}
               </div>
+              {todayVisual.shifts.map(({ shift, job }) => (
+                <div key={shift.jobId} style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>
+                  {job?.name ?? 'Trabalho'} • {fmtH(shift.hours)}
+                  {shift.swap ? ' (troca)' : ''}
+                </div>
+              ))}
             </IonCardContent>
           </IonCard>
 

@@ -90,11 +90,13 @@
 
 /* ----- Cores compartilhadas dos dias (faixa + calendário) ----- */
 /*
- * is-work        -> trabalho do ciclo (azul/primary)
- * is-extra-turno -> troca para trabalhar numa folga (verde/success)
- * is-cancelled   -> dia de trabalho cancelado (folga via troca)
- * is-rest        -> folga normal
- * is-today       -> destaque de hoje (anel)
+ * is-work      -> dia de plantão. O fundo vem inline com a cor do emprego (ou faixas
+ *                 diagonais se mais de um emprego trabalha no dia) — ver dayVisual() em src/lib/jobs.ts
+ * is-multi     -> mais de um emprego no dia (sombra no texto para ler sobre as faixas)
+ * has-swap     -> algum plantão do dia veio de troca (contorno tracejado)
+ * is-cancelled -> dia de trabalho cancelado (folga via troca)
+ * is-rest      -> folga normal
+ * is-today     -> destaque de hoje (anel)
  */
 
 /* ----- Faixa horizontal (Dashboard) ----- */
@@ -198,16 +200,32 @@
   opacity: 0.35;
 }
 
-/* Cores por tipo (aplicadas a chips e células) */
+/* Cores por tipo (aplicadas a chips e células). No is-work, o estilo inline com a cor do
+   emprego sobrepõe este fallback. */
 .agenda-chip.is-work,
 .cal-day.is-work {
   background: var(--ion-color-primary);
   color: var(--ion-color-primary-contrast);
 }
-.agenda-chip.is-extra-turno,
-.cal-day.is-extra-turno {
-  background: var(--ion-color-success);
-  color: var(--ion-color-success-contrast);
+.agenda-chip.is-multi,
+.cal-day.is-multi,
+ion-card.is-multi {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.agenda-chip.has-swap::after,
+.cal-day.has-swap::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1.5px dashed currentColor;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.agenda-chip.has-swap::after {
+  border-radius: 11px;
+}
+.cal-day.has-swap::after {
+  border-radius: 9px;
 }
 .agenda-chip.is-rest,
 .cal-day.is-rest {
@@ -241,6 +259,8 @@
   height: 6px;
   border-radius: 50%;
   background: var(--ion-color-warning);
+  /* Anel claro para o ponto aparecer sobre qualquer cor de emprego. */
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9);
 }
 
 /* ----- Legenda do calendário ----- */
@@ -263,11 +283,9 @@
   border-radius: 4px;
   display: inline-block;
 }
-.cal-legend__dot.is-work {
-  background: var(--ion-color-primary);
-}
-.cal-legend__dot.is-extra-turno {
-  background: var(--ion-color-success);
+.cal-legend__dot.has-swap {
+  border: 1.5px dashed var(--ion-color-medium);
+  box-sizing: border-box;
 }
 .cal-legend__dot.is-cancelled,
 .cal-legend__dot.is-rest {
@@ -277,4 +295,38 @@
 .cal-legend__dot.is-extra-mark {
   background: var(--ion-color-warning);
   border-radius: 50%;
+}
+
+/* ----- Empregos (cor + nome) ----- */
+.job-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+ion-item .job-dot[slot='start'] {
+  margin-inline-end: 12px;
+}
+
+/* Paleta de cores do emprego */
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.color-swatch {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.color-swatch.is-selected {
+  box-shadow: 0 0 0 3px var(--ion-background-color, #fff), 0 0 0 5px var(--ion-color-dark);
 }

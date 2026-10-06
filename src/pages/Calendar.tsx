@@ -6,21 +6,25 @@ import {
   IonTitle,
   IonContent,
 } from '@ionic/react';
-import { todayISO, startOfMonth } from '../lib/schedule';
+import { todayISO, startOfMonth, endOfMonth } from '../lib/schedule';
+import { useData } from '../lib/data';
+import { jobsActiveInRange } from '../lib/jobs';
 import MonthCalendar from '../components/MonthCalendar';
 import DayActions from '../components/DayActions';
 
 const LEGEND = [
-  { mod: 'is-work', label: 'Trabalho' },
-  { mod: 'is-extra-turno', label: 'Troca (trabalho)' },
+  { mod: 'has-swap', label: 'Troca (trabalho)' },
   { mod: 'is-cancelled', label: 'Cancelado' },
   { mod: 'is-rest', label: 'Folga' },
 ];
 
 export default function Calendar() {
+  const { jobs, periods } = useData();
   const today = todayISO();
   const [month, setMonth] = useState(startOfMonth(today));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // Legenda só com os trabalhos que existem no mês exibido (um encerrado some dos meses seguintes).
+  const monthJobs = jobsActiveInRange(startOfMonth(month), endOfMonth(month), jobs, periods);
 
   return (
     <IonPage>
@@ -39,6 +43,13 @@ export default function Calendar() {
           />
 
           <div className="cal-legend">
+            {/* Um item por trabalho, com a cor escolhida para ele. */}
+            {monthJobs.map((j) => (
+              <div key={j.id} className="cal-legend__item">
+                <span className="cal-legend__dot" style={{ background: j.color }} />
+                {j.name}
+              </div>
+            ))}
             {LEGEND.map(({ mod, label }) => (
               <div key={mod} className="cal-legend__item">
                 <span className={`cal-legend__dot ${mod}`} />

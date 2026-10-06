@@ -8,9 +8,10 @@ import {
 } from 'react';
 import { api } from './api';
 import { useAuth } from './auth';
-import type { SchedulePeriod, ExtraHour, ShiftSwap } from './types';
+import type { Job, SchedulePeriod, ExtraHour, ShiftSwap } from './types';
 
 interface DataState {
+  jobs: Job[];
   periods: SchedulePeriod[];
   extras: ExtraHour[];
   swaps: ShiftSwap[];
@@ -22,6 +23,7 @@ const DataContext = createContext<DataState | undefined>(undefined);
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [periods, setPeriods] = useState<SchedulePeriod[]>([]);
   const [extras, setExtras] = useState<ExtraHour[]>([]);
   const [swaps, setSwaps] = useState<ShiftSwap[]>([]);
@@ -29,6 +31,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     if (!user) {
+      setJobs([]);
       setPeriods([]);
       setExtras([]);
       setSwaps([]);
@@ -36,11 +39,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
-      const [p, e, s] = await Promise.all([
+      const [j, p, e, s] = await Promise.all([
+        api.getJobs(),
         api.getSchedules(),
         api.getExtras(),
         api.getSwaps(),
       ]);
+      setJobs(j.jobs);
       setPeriods(p.periods);
       setExtras(e.extras);
       setSwaps(s.swaps);
@@ -54,7 +59,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [reload]);
 
   return (
-    <DataContext.Provider value={{ periods, extras, swaps, loading, reload }}>
+    <DataContext.Provider value={{ jobs, periods, extras, swaps, loading, reload }}>
       {children}
     </DataContext.Provider>
   );

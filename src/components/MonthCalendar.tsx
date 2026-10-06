@@ -3,7 +3,7 @@ import { IonButton, IonIcon } from '@ionic/react';
 import { chevronBackOutline, chevronForwardOutline } from 'ionicons/icons';
 import { useData } from '../lib/data';
 import { todayISO, getMonthMatrix, getDayStatus, monthLabel, addMonths } from '../lib/schedule';
-import { dayModifier } from './AgendaStrip';
+import { dayClassNames, dayStyle, dayVisual } from '../lib/jobs';
 
 interface Props {
   /** Qualquer dia do mês exibido (ISO YYYY-MM-DD). */
@@ -15,9 +15,9 @@ interface Props {
 
 const WEEKDAY_INITIALS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
-/** Calendário mensal em grade (vista mês estilo Google), colorido por tipo de dia. */
+/** Calendário mensal em grade (vista mês estilo Google), colorido pelo emprego de cada dia. */
 export default function MonthCalendar({ month, onMonthChange, onToday, onSelectDay }: Props) {
-  const { periods, swaps, extras } = useData();
+  const { jobs, periods, swaps, extras } = useData();
   const today = todayISO();
   const monthKey = month.slice(0, 7);
 
@@ -56,14 +56,16 @@ export default function MonthCalendar({ month, onMonthChange, onToday, onSelectD
         {weeks.map((week) =>
           week.map((iso) => {
             const status = getDayStatus(iso, periods, swaps, extras);
+            const visual = dayVisual(status, jobs);
             const outside = iso.slice(0, 7) !== monthKey;
             return (
               <button
                 key={iso}
                 type="button"
-                className={`cal-day ${dayModifier(status)} ${outside ? 'is-outside' : ''} ${
+                className={`cal-day ${dayClassNames(visual)} ${outside ? 'is-outside' : ''} ${
                   iso === today ? 'is-today' : ''
                 }`}
+                style={dayStyle(visual)}
                 onClick={() => onSelectDay(iso)}
               >
                 <span className="cal-day__num">{Number(iso.slice(8, 10))}</span>

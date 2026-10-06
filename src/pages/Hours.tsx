@@ -32,6 +32,7 @@ import {
   sumHours,
   formatFullBR,
 } from '../lib/schedule';
+import { jobsActiveInRange } from '../lib/jobs';
 
 type Period = 'week' | 'month' | 'year';
 
@@ -40,7 +41,7 @@ function fmtH(n: number): string {
 }
 
 export default function Hours() {
-  const { periods, extras, swaps, reload } = useData();
+  const { jobs, periods, extras, swaps, reload } = useData();
   const [range, setRange] = useState<Period>('week');
   const today = todayISO();
 
@@ -74,6 +75,14 @@ export default function Hours() {
   };
 
   const label = range === 'week' ? 'esta semana' : range === 'month' ? 'este mês' : 'este ano';
+  // Trabalhos que importam neste período: ativos nele ou com horas lançadas (um trabalho encerrado
+  // antes do período não aparece com 0h).
+  const rangeJobs = useMemo(() => {
+    const active = new Set(jobsActiveInRange(start, end, jobs, periods).map((j) => j.id));
+    return jobs.filter((j) => active.has(j.id) || summary.byJob[j.id]);
+  }, [start, end, jobs, periods, summary]);
+  const multipleJobs = rangeJobs.length > 1;
+  const jobById = new Map(jobs.map((j) => [j.id, j]));
 
   return (
     <IonPage>
@@ -120,8 +129,38 @@ export default function Hours() {
             </IonCard>
           </div>
 
-          <p className="section-title">Horas extras lançadas</p>
+          <p className="section-title">
+            {multipleJobs ? 'Plantões por trabalho' : 'Horas extras lançadas'}
+          </p>
         </div>
+
+        {multipleJobs && (
+          <>
+            <IonList inset>
+              {rangeJobs.map((j) => {
+                const h = summary.byJob[j.id];
+                const count = h?.workDays ?? 0;
+                const extra = h?.extra ?? 0;
+                return (
+                  <IonItem key={j.id}>
+                    <span slot="start" className="job-dot" style={{ background: j.color }} />
+                    <IonLabel>
+                      <h3>{j.name}</h3>
+                      <p>
+                        {count} {count === 1 ? 'plantão' : 'plantões'}
+                        {extra > 0 && ` · +${fmtH(extra)} extra`}
+                      </p>
+                    </IonLabel>
+                    <IonNote slot="end">{fmtH((h?.scheduled ?? 0) + extra)}</IonNote>
+                  </IonItem>
+                );
+              })}
+            </IonList>
+            <div className="ion-padding-start ion-padding-end ion-padding-bottom">
+              <p className="section-title">Horas extras lançadas</p>
+            </div>
+          </>
+        )}
 
         {extrasInRange.length === 0 ? (
           <div className="empty-state">
@@ -129,24 +168,34 @@ export default function Hours() {
           </div>
         ) : (
           <IonList inset>
-            {extrasInRange.map((e) => (
-              <IonItemSliding key={e.id}>
-                <IonItem>
-                  <IonLabel>
-                    <h3>{formatFullBR(e.date)}</h3>
-                    {e.description && <p>{e.description}</p>}
-                  </IonLabel>
-                  <IonNote slot="end" color="primary">
-                    +{fmtH(Number(e.hours))}
-                  </IonNote>
-                </IonItem>
-                <IonItemOptions side="end">
-                  <IonItemOption color="danger" onClick={() => removeExtra(e.id)}>
-                    <IonIcon slot="icon-only" icon={trashOutline} />
-                  </IonItemOption>
-                </IonItemOptions>
-              </IonItemSliding>
-            ))}
+            {extrasInRange.map((e) => {
+              // Com mais de um trabalho cadastrado, mostra de qual é cada hora extra.
+              const job = jobs.length > 1 ? jobById.get(e.jobId) : undefined;
+              return (
+                <IonItemSliding key={e.id}>
+                  <IonItem>
+                    {job && (
+                      <span slot="start" className="job-dot" style={{ background: job.color }} />
+                    )}
+                    <IonLabel>
+                      <h3>
+                        {formatFullBR(e.date)}
+                        {job ? ` • ${job.name}` : ''}
+                      </h3>
+                      {e.description && <p>{e.description}</p>}
+                    </IonLabel>
+                    <IonNote slot="end" color="primary">
+                      +{fmtH(Number(e.hours))}
+                    </IonNote>
+                  </IonItem>
+                  <IonItemOptions side="end">
+                    <IonItemOption color="danger" onClick={() => removeExtra(e.id)}>
+                      <IonIcon slot="icon-only" icon={trashOutline} />
+                    </IonItemOption>
+                  </IonItemOptions>
+                </IonItemSliding>
+              );
+            })}
           </IonList>
         )}
       </IonContent>

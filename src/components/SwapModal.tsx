@@ -19,39 +19,74 @@ import {
 } from '@ionic/react';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { jobsAvailableOn, suggestJobForDay } from '../lib/jobs';
 import { todayISO } from '../lib/schedule';
 import type { SwapKind } from '../lib/types';
+import JobPicker from './JobPicker';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   defaultDate?: string;
   defaultKind?: SwapKind;
+  /** Trabalho pré-selecionado (sem ele, o primeiro). */
+  defaultJobId?: string;
 }
 
-export default function SwapModal({ isOpen, onClose, defaultDate, defaultKind }: Props) {
-  const { reload } = useData();
+export default function SwapModal({
+  isOpen,
+  onClose,
+  defaultDate,
+  defaultKind,
+  defaultJobId,
+}: Props) {
+  const { jobs, periods, swaps, reload } = useData();
   const [date, setDate] = useState(defaultDate ?? todayISO());
   const [kind, setKind] = useState<SwapKind>(defaultKind ?? 'extra_turno');
+  const [jobId, setJobId] = useState('');
   const [hours, setHours] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Sincroniza data/tipo ao (re)abrir, respeitando os valores pré-selecionados.
+  // Trabalho efetivo: o escolhido, se estiver disponível na data; senão o primeiro disponível
+  // (com um só trabalho o seletor nem aparece, e a troca vai para ele). Trabalhos encerrados antes
+  // da data ficam de fora.
+  const available = jobsAvailableOn(date || todayISO(), jobs, periods);
+  const selectedJobId = available.some((j) => j.id === jobId) ? jobId : (available[0]?.id ?? '');
+
+  const initialJobId = () => {
+    const k = defaultKind ?? 'extra_turno';
+    return (
+      defaultJobId ??
+      suggestJobForDay(
+        defaultDate ?? todayISO(),
+        k === 'folga' ? 'working' : 'resting',
+        jobs,
+        periods,
+        swaps,
+      ) ??
+      ''
+    );
+  };
+
+  // Sincroniza data/tipo/trabalho ao (re)abrir, respeitando os valores pré-selecionados.
+  // `jobs`/`periods`/`swaps` ficam fora das deps: o reload após salvar não deve mexer no formulário.
   useEffect(() => {
     if (isOpen) {
       setDate(defaultDate ?? todayISO());
       setKind(defaultKind ?? 'extra_turno');
+      setJobId(initialJobId());
       setHours('');
       setNote('');
       setError('');
     }
-  }, [isOpen, defaultDate, defaultKind]);
+  }, [isOpen, defaultDate, defaultKind, defaultJobId]);
 
   const reset = () => {
     setDate(defaultDate ?? todayISO());
     setKind(defaultKind ?? 'extra_turno');
+    setJobId(initialJobId());
     setHours('');
     setNote('');
     setError('');
@@ -60,13 +95,14 @@ export default function SwapModal({ isOpen, onClose, defaultDate, defaultKind }:
   const save = async () => {
     setError('');
     if (!date) return setError('Escolha a data.');
+    if (!selectedJobId) return setError('Nenhum trabalho ativo nessa data.');
     const h = hours ? Number(hours) : null;
     if (h != null && (!Number.isFinite(h) || h <= 0)) {
       return setError('Horas inválidas.');
     }
     setBusy(true);
     try {
-      await api.createSwap({ date, kind, hours: h, note: note || null });
+      await api.createSwap({ jobId: selectedJobId, date, kind, hours: h, note: note || null });
       await reload();
       reset();
       onClose();
@@ -109,6 +145,8 @@ export default function SwapModal({ isOpen, onClose, defaultDate, defaultKind }:
             ? 'Marque um dia que normalmente seria folga mas você vai trabalhar.'
             : 'Marque um dia que seria de trabalho mas você não vai (passou o plantão).'}
         </IonNote>
+
+        <JobPicker jobs={available} value={selectedJobId} onChange={setJobId} />
 
         <IonList inset>
           <IonItem>

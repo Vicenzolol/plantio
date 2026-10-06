@@ -1,4 +1,4 @@
-import type { AuthUser, SchedulePeriod, ExtraHour, ShiftSwap } from './types';
+import type { AuthUser, Job, SchedulePeriod, ExtraHour, ShiftSwap } from './types';
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -25,6 +25,14 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export interface ScheduleInput {
+  effectiveFrom: string;
+  workDays: number;
+  restDays: number;
+  shiftHours: number;
+  shiftStartTime?: string | null;
+}
+
 export const api = {
   // auth
   me: () => request<{ user: AuthUser | null; hasSchedule?: boolean }>('/api/auth/me'),
@@ -40,15 +48,30 @@ export const api = {
     }),
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
 
+  // jobs (empregos)
+  getJobs: () => request<{ jobs: Job[] }>('/api/jobs'),
+  createJob: (body: { name: string; color: string; schedule: ScheduleInput }) =>
+    request<{ job: Job; period: SchedulePeriod }>('/api/jobs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateJob: (id: string, body: { name?: string; color?: string }) =>
+    request<{ job: Job }>(`/api/jobs?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteJob: (id: string) =>
+    request<{ ok: true }>(`/api/jobs?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Encerra o trabalho: `endDate` é o último dia trabalhado nele (o histórico é mantido). */
+  endJob: (id: string, endDate: string) =>
+    request<{ ok: true; endDate: string }>(`/api/jobs?id=${encodeURIComponent(id)}&action=end`, {
+      method: 'POST',
+      body: JSON.stringify({ endDate }),
+    }),
+
   // schedules
   getSchedules: () => request<{ periods: SchedulePeriod[] }>('/api/schedules'),
-  createSchedule: (body: {
-    effectiveFrom: string;
-    workDays: number;
-    restDays: number;
-    shiftHours: number;
-    shiftStartTime?: string | null;
-  }) =>
+  createSchedule: (body: ScheduleInput & { jobId: string }) =>
     request<{ period: SchedulePeriod }>('/api/schedules', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -56,7 +79,12 @@ export const api = {
 
   // extras
   getExtras: () => request<{ extras: ExtraHour[] }>('/api/extras'),
-  createExtra: (body: { date: string; hours: number; description?: string | null }) =>
+  createExtra: (body: {
+    jobId: string;
+    date: string;
+    hours: number;
+    description?: string | null;
+  }) =>
     request<{ extra: ExtraHour }>('/api/extras', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -67,6 +95,7 @@ export const api = {
   // swaps
   getSwaps: () => request<{ swaps: ShiftSwap[] }>('/api/swaps'),
   createSwap: (body: {
+    jobId: string;
     date: string;
     kind: 'folga' | 'extra_turno';
     hours?: number | null;
