@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq, desc } from 'drizzle-orm';
 import { db, schema } from '../../db/client';
 import { requireUser } from '../_lib/auth';
+import { findUserJob } from '../_lib/jobs';
+import { jobClosedOn } from '../_lib/periods';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireUser(req, res);
@@ -18,7 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { date, kind, hours, note } = (req.body ?? {}) as {
+    const { jobId, date, kind, hours, note } = (req.body ?? {}) as {
+      jobId?: string;
       date?: string;
       kind?: string;
       hours?: number | null;
@@ -40,9 +43,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hoursValue = String(h);
     }
 
+    // A troca vale só para o emprego informado (sem jobId, cliente antigo: o emprego mais antigo).
+    const job = await findUserJob(userId, jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Emprego não encontrado.' });
+    }
+    const closed = await jobClosedOn(job.id, date);
+    if (closed) {
+      return res.status(400).json({ error: closed });
+    }
+
     const [created] = await db
       .insert(schema.shiftSwaps)
-      .values({ userId, date, kind, hours: hoursValue, note: note?.trim() || null })
+      .values({ userId, jobId: job.id, date, kind, hours: hoursValue, note: note?.trim() || null })
       .returning();
 
     return res.status(201).json({ swap: created });

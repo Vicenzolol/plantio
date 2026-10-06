@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq, desc } from 'drizzle-orm';
 import { db, schema } from '../../db/client';
 import { requireUser } from '../_lib/auth';
+import { findUserJob } from '../_lib/jobs';
+import { isValidISODate, jobClosedOn } from '../_lib/periods';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireUser(req, res);
@@ -18,13 +20,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { date, hours, description } = (req.body ?? {}) as {
+    const { jobId, date, hours, description } = (req.body ?? {}) as {
+      jobId?: string;
       date?: string;
       hours?: number;
       description?: string | null;
     };
 
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!isValidISODate(date)) {
       return res.status(400).json({ error: 'Data inválida (use YYYY-MM-DD).' });
     }
     const h = Number(hours);
@@ -32,9 +35,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Horas deve estar entre 0 e 24.' });
     }
 
+    // A hora extra pertence a um emprego (sem jobId, cliente antigo: o emprego mais antigo).
+    const job = await findUserJob(userId, jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Emprego não encontrado.' });
+    }
+    const closed = await jobClosedOn(job.id, date);
+    if (closed) {
+      return res.status(400).json({ error: closed });
+    }
+
     const [created] = await db
       .insert(schema.extraHours)
-      .values({ userId, date, hours: String(h), description: description?.trim() || null })
+      .values({ userId, jobId: job.id, date, hours: String(h), description: description?.trim() || null })
       .returning();
 
     return res.status(201).json({ extra: created });

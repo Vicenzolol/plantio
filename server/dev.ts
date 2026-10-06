@@ -6,6 +6,7 @@ import authLogin from '../api/auth/login';
 import authLogout from '../api/auth/logout';
 import authMe from '../api/auth/me';
 import authRegister from '../api/auth/register';
+import jobs from '../api/jobs/index';
 import schedules from '../api/schedules/index';
 import extras from '../api/extras/index';
 import extrasId from '../api/extras/[id]';
@@ -20,6 +21,7 @@ app.all('/api/auth/login', (req, res) => authLogin(req as any, res as any));
 app.all('/api/auth/logout', (req, res) => authLogout(req as any, res as any));
 app.all('/api/auth/me', (req, res) => authMe(req as any, res as any));
 app.all('/api/auth/register', (req, res) => authRegister(req as any, res as any));
+app.all('/api/jobs', (req, res) => jobs(req as any, res as any));
 app.all('/api/schedules', (req, res) => schedules(req as any, res as any));
 app.all('/api/extras', (req, res) => extras(req as any, res as any));
 app.all('/api/extras/:id', (req, res) => {
